@@ -4,7 +4,7 @@ gi.require_version("Gtk", "4.0")
 
 from gi.repository import Gtk, GLib, Gdk
 
-from .clicker import AutoClicker
+from .clicker import JCLClicker
 from .config import load_config, save_config
 from .hotkeys import GlobalHotkey, HotkeyError, KEY_MAP
 from .state import ClickerState
@@ -25,7 +25,7 @@ STATUS_TEXT = {
 }
 
 
-class AutoClickerWindow(Gtk.ApplicationWindow):
+class JCLClickerWindow(Gtk.ApplicationWindow):
 
     def __init__(self, app):
         super().__init__(application=app, title="JCL Clicker")
@@ -202,7 +202,7 @@ class AutoClickerWindow(Gtk.ApplicationWindow):
         self.error_label.set_visible(False)
         self.error_label.set_text("")
 
-        self.bot = AutoClicker(
+        self.bot = JCLClicker(
             interval=self.config["interval"],
             button=self.config["button"],
             amount=self.config["amount"],
@@ -215,7 +215,7 @@ class AutoClickerWindow(Gtk.ApplicationWindow):
         self._set_inputs_sensitive(False)
 
     def _on_clicker_event(self, value):
-        # Executa na thread do AutoClicker: repassa para a thread principal do GTK
+        # Executa na thread do JCLClicker: repassa para a thread principal do GTK
         GLib.idle_add(self._handle_event_in_main_thread, value)
 
     def _handle_event_in_main_thread(self, value):
@@ -284,7 +284,7 @@ label.error {
 """
 
 
-class AutoClickerApp(Gtk.Application):
+class JCLClickerApp(Gtk.Application):
 
     def __init__(self):
         super().__init__(application_id="io.github.jotaomh.jclclicker")
@@ -303,5 +303,5 @@ class AutoClickerApp(Gtk.Application):
     def do_activate(self):
         window = self.props.active_window
         if not window:
-            window = AutoClickerWindow(self)
+            window = JCLClickerWindow(self)
         window.present()

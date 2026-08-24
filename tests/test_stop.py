@@ -1,13 +1,13 @@
 import time
 
-from app.clicker import AutoClicker
+from app.clicker import JCLClicker
 
 
 def status(valor):
     print("Evento:", valor)
 
 
-bot = AutoClicker(
+bot = JCLClicker(
     interval=0.5,
     callback=status
 )

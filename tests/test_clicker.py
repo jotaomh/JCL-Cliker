@@ -1,4 +1,4 @@
-from app.clicker import AutoClicker
+from app.clicker import JCLClicker
 
 
 clicks = 0
@@ -11,7 +11,7 @@ def status(valor):
     print("Evento:", valor)
 
 
-bot = AutoClicker(
+bot = JCLClicker(
     interval=0.1,
     amount=10,
     callback=status

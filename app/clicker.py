@@ -5,7 +5,7 @@ from .mouse import click, click_burst, get_session, MouseError
 from .state import ClickerState
 
 
-class AutoClicker:
+class JCLClicker:
 
     def __init__(self, interval=0.1, button=1, amount=0, callback=None):
 

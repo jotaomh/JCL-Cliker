@@ -1,10 +1,10 @@
 import sys
 
-from app.gui import AutoClickerApp
+from app.gui import JCLClickerApp
 
 
 def main():
-    app = AutoClickerApp()
+    app = JCLClickerApp()
     return app.run(sys.argv)
 
 
