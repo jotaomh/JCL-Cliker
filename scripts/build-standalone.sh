@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Gera o binário standalone do JCL Clicker (tarball com PyInstaller).
+# Gera o binário standalone do JCL Clicker (tarball com PyInstaller --onefile).
 #
-# Este é o ÚNICO alvo que usa PyInstaller --onefile: precisa embutir
-# Python + GTK4 + tudo mais para rodar em máquinas sem dependências
-# pré-instaladas, então é naturalmente o artefato mais pesado.
+# Este é o ÚNICO alvo que usa PyInstaller: precisa embutir Python + GTK4 para
+# rodar em máquinas sem dependências pré-instaladas — é naturalmente o
+# artefato mais pesado (veja README, seção de instalação).
 #
-# O ydotool vendorizado é embutido via --add-binary e resolvido em runtime
-# por app/mouse.py através de sys._MEIPASS.
+# Redução de tamanho (de ~92MB para poucos dezenas de MB):
+#   - hooksconfig do gi: NÃO coleta temas de ícones (~135MB!), temas GTK3
+#     e traduções além de pt_BR — o hook coleta TUDO do sistema por padrão
+#   - filtro pós-Análise no spec: remove GTK3 (o app usa só GTK4)
+#   - --exclude-module para módulos não usados
+#
+# UPX: o PyInstaller desativa UPX fora do Windows por padrão (causa
+# segfaults conhecidos em shared libraries dlopen'd no Linux) e forçar via
+# PYINSTALLER_FORCE_UPX é arriscado — por isso não é usado aqui. O arquivo
+# interno do --onefile já sai comprimido com zlib.
+#
+# O ydotool vendorizado é embutido via o spec e resolvido em runtime por
+# app/mouse.py através de sys._MEIPASS.
 
 VERSION="${1:?Uso: $0 <versão>}"
 
@@ -40,29 +51,88 @@ fi
 rm -rf "$BUILD_DIR"
 mkdir -p "$STAGE_DIR"
 
-if command -v upx >/dev/null 2>&1; then
-    echo "UPX disponível ($(upx --version | head -1)) — comprimindo binário."
-else
-    echo "AVISO: UPX não encontrado no PATH — binário sai sem compressão extra." >&2
-fi
+# --- spec gerado sob medida (hooksconfig não é exposto na CLI do PyInstaller) ---
+cat > "$BUILD_DIR/jcl-clicker.spec" << 'SPEC'
+# -*- mode: python ; coding: utf-8 -*-
+import os
+
+REPO = os.environ["JCL_REPO_DIR"]
+
+a = Analysis(
+    [os.path.join(REPO, "app", "main.py")],
+    pathex=[REPO],
+    binaries=[
+        (os.path.join(REPO, "vendor", "ydotool", "ydotool"), "vendor/ydotool"),
+        (os.path.join(REPO, "vendor", "ydotool", "ydotoold"), "vendor/ydotool"),
+    ],
+    datas=[],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={
+        "gi": {
+            # padrão do hook coleta TODOS os temas de ícones do sistema
+            # (135MB+): o app não carrega ícones por nome, então nenhum
+            "icons": [],
+            # temas GTK do sistema: GTK4 já traz Adwaita embutido
+            "themes": [],
+            # traduções só do idioma do app
+            "languages": ["pt_BR"],
+        },
+    },
+    runtime_hooks=[],
+    excludes=[
+        "tkinter",
+        "unittest",
+        "pydoc",
+        "pydoc_data",
+        "curses",
+        "lib2to3",
+        "pytest",
+    ],
+    noarchive=False,
+)
+
+
+def _keep(entry):
+    # remove GTK3 inteiro (o app usa somente GTK4) e sobras de temas
+    dest = entry[0]
+    forbidden = ("gtk-3", "gdk-3", "Gtk-3", "Gdk-3", "share/themes", "share/icons")
+    return not any(token in dest for token in forbidden)
+
+
+a.binaries = [entry for entry in a.binaries if _keep(entry)]
+a.datas = [entry for entry in a.datas if _keep(entry)]
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name="jcl-clicker",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+SPEC
 
 cd "$REPO_DIR"
-"$PY" -m PyInstaller \
-    --onefile \
-    --name "$BIN_NAME" \
-    --add-binary "$REPO_DIR/vendor/ydotool/ydotool:vendor/ydotool" \
-    --add-binary "$REPO_DIR/vendor/ydotool/ydotoold:vendor/ydotool" \
-    --exclude-module tkinter \
-    --exclude-module unittest \
-    --exclude-module pydoc \
-    --exclude-module pydoc_data \
-    --exclude-module curses \
-    --exclude-module lib2to3 \
-    --exclude-module pytest \
+JCL_REPO_DIR="$REPO_DIR" "$PY" -m PyInstaller \
+    --noconfirm \
     --distpath "$STAGE_DIR" \
     --workpath "$BUILD_DIR/build" \
-    --specpath "$BUILD_DIR" \
-    app/main.py
+    "$BUILD_DIR/jcl-clicker.spec"
 
 cp "$REPO_DIR/packaging/standalone/autoclicker.desktop" "$STAGE_DIR/"
 cp "$REPO_DIR/packaging/standalone/install.sh" "$STAGE_DIR/"
