@@ -28,7 +28,7 @@ STATUS_TEXT = {
 class AutoClickerWindow(Gtk.ApplicationWindow):
 
     def __init__(self, app):
-        super().__init__(application=app, title="AutoClicker")
+        super().__init__(application=app, title="JCL Clicker")
 
         self.set_default_size(360, 260)
         self.set_resizable(False)
@@ -287,7 +287,7 @@ label.error {
 class AutoClickerApp(Gtk.Application):
 
     def __init__(self):
-        super().__init__(application_id="io.github.jotinhagamer22.autoclicker")
+        super().__init__(application_id="io.github.jotaomh.jclclicker")
 
     def do_startup(self):
         Gtk.Application.do_startup(self)
