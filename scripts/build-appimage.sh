@@ -75,8 +75,9 @@ EOF
 chmod 755 "$APPDIR/AppRun"
 
 # --- empacota ---
+# zstd: compressão suportada pelo mksquashfs embutido no appimagetool atual
 cd "$DIST_DIR/appimage"
-ARCH=x86_64 run_appimagetool --comp gzip "AppDir" "$OUTPUT"
+ARCH=x86_64 run_appimagetool --comp zstd "AppDir" "$OUTPUT"
 
 echo
 echo "AppImage gerado:"
