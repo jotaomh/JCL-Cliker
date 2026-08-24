@@ -1,14 +1,43 @@
 import os
 import subprocess
+import sys
 import time
 import shutil
 
 VALID_BUTTONS = {1, 2, 3}
 
-_VENDOR_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "vendor", "ydotool"
-)
+# caminho fixo usado por instalações via .deb/.rpm (scripts/build-packages.sh)
+_SYSTEM_VENDOR_DIR = "/usr/lib/jcl-clicker/vendor/ydotool"
+
+
+def _resolve_vendor_dir():
+    """Localiza o diretório com os binários vendorizados do ydotool.
+
+    - PyInstaller (--onefile/--onedir): binários embutidos via --add-binary
+      são extraídos para a raiz apontada por sys._MEIPASS
+    - source (dev) e instalação .deb/.rpm: vendor/ fica na raiz do app,
+      um nível acima do pacote Python (ex: /usr/lib/jcl-clicker/vendor/)
+    - último recurso: caminho fixo da instalação de sistema
+    """
+    candidates = []
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "vendor", "ydotool"))
+
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates.append(os.path.join(base, "vendor", "ydotool"))
+
+    candidates.append(_SYSTEM_VENDOR_DIR)
+
+    for candidate in candidates:
+        if os.path.isdir(candidate):
+            return candidate
+
+    return candidates[-1]
+
+
+_VENDOR_DIR = _resolve_vendor_dir()
 
 _VENDORED_YDOTOOL = os.path.join(_VENDOR_DIR, "ydotool")
 _VENDORED_YDOTOOLD = os.path.join(_VENDOR_DIR, "ydotoold")
@@ -20,10 +49,26 @@ _YDOTOOL_BUTTON_MAP = {1: "0xC0", 2: "0xC2", 3: "0xC1"}
 
 _x11_controller = None
 _daemon_process = None
+_ydotool_source_logged = False
 
 
 class MouseError(Exception):
     """Erro ao tentar executar um clique de mouse."""
+
+
+def _debug_log(message):
+    # JCL_CLICKER_DEBUG=1 mostra no stderr qual binário/vendor está em uso
+    if os.environ.get("JCL_CLICKER_DEBUG") == "1":
+        print(f"[jcl-clicker] {message}", file=sys.stderr)
+
+
+def _log_ydotool_source():
+    global _ydotool_source_logged
+    if _ydotool_source_logged:
+        return
+    _ydotool_source_logged = True
+    _debug_log(f"vendor dir: {_VENDOR_DIR}")
+    _debug_log(f"binário ydotool em uso: {_ydotool_binary()}")
 
 
 def _ydotool_binary():
@@ -63,8 +108,10 @@ def _ensure_daemon_running():
             pass
 
     if not (os.path.isfile(_VENDORED_YDOTOOLD) and os.access(_VENDORED_YDOTOOLD, os.X_OK)):
+        _debug_log("ydotoold vendorizado não encontrado, seguindo sem daemon próprio")
         return  # sem daemon vendorizado, deixa o erro normal acontecer e avisar o usuário
 
+    _debug_log(f"subindo daemon: {_VENDORED_YDOTOOLD}")
     _daemon_process = subprocess.Popen(
         [_VENDORED_YDOTOOLD, f"--socket-path={_YDOTOOL_SOCKET_PATH}"],
         stdout=subprocess.DEVNULL,
@@ -102,6 +149,7 @@ def click(button=1):
     if session == "wayland":
 
         _ensure_daemon_running()
+        _log_ydotool_source()
 
         env = os.environ.copy()
         env["YDOTOOL_SOCKET"] = _YDOTOOL_SOCKET_PATH
@@ -164,6 +212,7 @@ def click_burst(button=1, count=1, interval=0.1, running_flag=None, on_click=Non
         )
 
     _ensure_daemon_running()
+    _log_ydotool_source()
 
     env = os.environ.copy()
     env["YDOTOOL_SOCKET"] = _YDOTOOL_SOCKET_PATH
