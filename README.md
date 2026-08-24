@@ -1,6 +1,6 @@
-# Auto Clicker para Linux
+# JCL Clicker (Linux)
 
-Auto Clicker com suporte a **X11** e **Wayland**, interface GTK4 e atalho global de teclado.
+Auto clicker com suporte a **X11** e **Wayland**, interface GTK4 e atalho global de teclado.
 
 Projeto desenvolvido em Python com foco em compatibilidade com diferentes ambientes gráficos Linux.
 
@@ -8,11 +8,38 @@ Projeto desenvolvido em Python com foco em compatibilidade com diferentes ambien
 
 ## Status
 
-Versão atual: **v0.7.0**
+Versão atual: **v0.8.0**
 
 ---
 
 ## Changelog
+
+### v0.8.0 — rebranding JCL Clicker + pacotamento consertado
+
+- **Rebranding completo para JCL Clicker**: janela, `application_id`
+  (`io.github.jotaomh.jclclicker`), nome de pacote/binário/comando
+  (`jcl-clicker`), diretório de config (`~/.config/jcl-clicker/`) e ícone.
+  Nomes de arquivo históricos mantidos (ex: `autoclicker.desktop`).
+- **Migração de config**: instalações antigas em `~/.config/autoclicker/` são
+  migradas automaticamente na primeira execução — nada é perdido no rebranding.
+- **Corrigido (crítico): o ydotool vendorizado não ia para os pacotes finais**
+  - o caminho `vendor/` só era resolvido rodando do source; no binário
+    PyInstaller e nas instalações `.deb`/`.rpm` o app caía no ydotool do
+    sistema (a origem do bug de clique lento no Wayland)
+  - agora o caminho é resolvido por contexto: `sys._MEIPASS` (frozen),
+    relativo ao pacote (source e `/usr/lib/jcl-clicker/`) e caminho fixo
+  - `.deb`/`.rpm`/standalone/AppImage **instalam/embutem** o ydotool vendorizado
+- **Corrigido: pacotes de ~100MB**
+  - `.deb`/`.rpm` não usam mais PyInstaller: viraram apps Python nativos que
+    usam o GTK4/PyGObject do sistema (73MB → ~230KB no `.deb`)
+  - standalone/AppImage seguem com PyInstaller, mas sem os ~135MB de temas de
+    ícones que o hook do `gi` coletava por padrão e sem o GTK3 (84MB → 40MB)
+- **`Depends: ydotool` removido** do `.deb`/`.rpm` (vira `Recommends`, só
+  fallback) — era isso que puxava o ydotool do sistema/snap
+- **Socket do ydotoold por usuário** (`$XDG_RUNTIME_DIR`), sem colisão com
+  daemon do sistema; detecção de daemon morto com erro claro
+- **AppImage disponível** (antes era só plano)
+- **Ícone próprio** (256x256) incluído nos três alvos
 
 ### v0.7.0
 
@@ -42,7 +69,7 @@ Versão atual: **v0.7.0**
 ✅ Motor de cliques independente da interface gráfica  
 ✅ Sistema de callbacks para eventos  
 ✅ Controle de estados do programa  
-✅ Configuração salva em `~/.config/autoclicker/config.json` (XDG)  
+✅ Configuração salva em `~/.config/jcl-clicker/config.json` (XDG)  
 ✅ Execução em thread separada  
 ✅ Interface gráfica em GTK4  
 ✅ Tratamento de erros (mouse indisponível, ydotool ausente, config corrompida)  
@@ -56,10 +83,10 @@ O projeto é dividido em módulos para facilitar manutenção e evolução.
 
 | Módulo | Responsabilidade |
 |---|---|
-| `clicker.py` | Lógica do AutoClicker: intervalo entre cliques, quantidade, execução em segundo plano, eventos, iniciar/parar |
-| `mouse.py` | Comunicação com o sistema: `pynput` no X11, `ydotool` no Wayland (detecção automática da sessão via `XDG_SESSION_TYPE`) |
+| `clicker.py` | Lógica do clicker: intervalo entre cliques, quantidade, execução em segundo plano, eventos, iniciar/parar |
+| `mouse.py` | Comunicação com o sistema: `pynput` no X11, `ydotool` vendorizado no Wayland (detecção automática da sessão via `XDG_SESSION_TYPE`) |
 | `state.py` | Estados do programa (IDLE, RUNNING, FINISHED, STOPPED, ERROR) |
-| `config.py` | Leitura/gravação da configuração em `~/.config/autoclicker/config.json` e migração de configs legados |
+| `config.py` | Leitura/gravação da configuração em `~/.config/jcl-clicker/config.json` e migração de configs legados |
 | `gui.py` | Interface gráfica GTK4 |
 | `hotkeys.py` | Atalho global: `pynput` no X11, `evdev` no Wayland |
 
@@ -85,7 +112,7 @@ FINISHED     STOPPED
 
 ### Configuração
 
-Armazenada em `~/.config/autoclicker/config.json` (XDG Base Directory Specification).
+Armazenada em `~/.config/jcl-clicker/config.json` (XDG Base Directory Specification).
 
 | Chave | Padrão | Descrição |
 |---|---|---|
@@ -94,7 +121,12 @@ Armazenada em `~/.config/autoclicker/config.json` (XDG Base Directory Specificat
 | `amount` | `0` | Quantidade de cliques (0 = infinito) |
 | `hotkey` | `f6` | Atalho global iniciar/parar |
 
-Se existir um `config.json` ao lado do executável (versão antiga), ele é migrado automaticamente para o novo local na primeira execução.
+Configs legadas são migradas automaticamente na primeira execução:
+
+- `config.json` na raiz do projeto (versão pré-XDG)
+- `~/.config/autoclicker/config.json` (instalação anterior ao rebranding)
+
+Se houver mais de um, prevalece o modificado por último.
 
 ---
 
@@ -118,33 +150,28 @@ AutoClicker-Linux
 │       └── ydotoold                 (daemon, compilado do source)
 │
 ├── packaging/
-│   ├── autoclicker.desktop
+│   ├── autoclicker.desktop          (nome de arquivo histórico; conteúdo → jcl-clicker)
 │   ├── postinst.sh
 │   ├── icons/
-│   │   └── autoclicker.png          (256x256, a ser adicionado)
+│   │   └── jcl-clicker.png          (256x256)
 │   └── standalone/
 │       ├── autoclicker.desktop
 │       ├── install.sh
 │       └── README.txt
 │
 ├── scripts/
-│   ├── build-packages.sh            (.deb / .rpm)
-│   └── build-standalone.sh          (binário standalone via PyInstaller + tar.gz)
+│   ├── build-packages.sh            (.deb / .rpm — app Python nativo)
+│   ├── build-standalone.sh          (binário standalone via PyInstaller + tar.gz)
+│   └── build-appimage.sh            (AppImage)
 │
 ├── tests/
-│   ├── test_click.py
-│   ├── test_clicker.py
-│   ├── test_config.py
-│   ├── test_mouse.py
-│   ├── test_save_config.py
-│   ├── test_stop.py
-│   ├── test_x11.py
-│   └── test_xdg_config.py
+│   └── ...
 │
 ├── RELEASE_NOTES.md
 ├── README.md
 ├── config.json                      (legado, migrado no primeiro uso)
-└── requirements.txt
+├── requirements.txt
+└── requirements-dev.txt
 ```
 
 ---
@@ -157,9 +184,9 @@ AutoClicker-Linux
 | pynput | pip | Controle de mouse/teclado no X11 |
 | python-xlib | pip | Bindings X11 (dependência do pynput) |
 | evdev | pip | Leitura de dispositivos de entrada no Wayland |
-| six | pip | Compatibilidade Python 2/3 |
+| six | pip | Compatibilidade — **mantida**: é dependência declarada do `python-xlib` 0.33, que a importa em runtime |
 | GTK4 (PyGObject) | **sistema** | Interface gráfica |
-| PyInstaller | pip | Empacotamento do binário standalone |
+| PyInstaller | pip | Empacotamento standalone/AppImage |
 | ydotool | **vendorizado** (`vendor/ydotool/`) | Controle de mouse no Wayland |
 
 ---
@@ -175,44 +202,71 @@ Testado em:
 
 ## Instalação
 
-O Auto Clicker pode ser instalado de três formas: pacote `.deb`, pacote `.rpm` ou binário standalone.
+Existem quatro formas de instalar. O que cada uma precisa do sistema:
+
+| Alvo | GTK4/PyGObject | libs pip (pynput etc.) | ydotool | Tamanho |
+|---|---|---|---|---|
+| `.deb` / `.rpm` | **do sistema** (dependência do pacote) | vendorizadas no pacote | vendorizado | ~0,3MB |
+| standalone | **embutida** no binário | embutidas | vendorizado | ~40MB |
+| AppImage | **embutida** no binário | embutidas | vendorizado | ~41MB |
+| source | do sistema (via distro) | via pip (`requirements.txt`) | vendorizado no repo | — |
+
+Ou seja: **só o source exige preparar dependências na mão**. Os demais alvos são autossuficientes (o standalone/AppImage até prescindem de GTK instalado, por isso pesam mais).
 
 ### Via pacote `.deb` (Debian / Ubuntu / Pop!_OS)
 
 ```bash
-sudo dpkg -i autoclicker_*.deb
+sudo dpkg -i jcl-clicker_*.deb
 sudo apt-get install -f   # resolve dependências, se necessário
 ```
+
+O pacote declara `python3`, `python3-gi`, `gir1.2-gtk-4.0` e `python3-evdev`
+como dependências e instala o comando `jcl-clicker`.
 
 ### Via pacote `.rpm` (Fedora / RHEL / openSUSE)
 
 ```bash
-sudo rpm -i autoclicker-*.rpm
+sudo rpm -i jcl-clicker-*.rpm
 ```
 
-### AppImage
+Dependências equivalentes: `python3`, `python3-gobject`, `gtk4`, `python3-evdev`.
 
-> 🚧 Ainda não disponível — nos planos, ver [Próximos passos](#próximos-passos).
+### AppImage (qualquer distro)
+
+Baixe `jcl-clicker-*-x86_64.AppImage` da release e:
+
+```bash
+chmod +x jcl-clicker-*-x86_64.AppImage
+./jcl-clicker-*-x86_64.AppImage
+```
+
+Não requer instalação nem dependências pré-existentes. Para integrar ao menu
+do sistema, rode o `install.sh` do tarball standalone (o AppImage em si pode
+viver em qualquer pasta).
 
 ### Binário standalone (qualquer distro)
 
-Extraia o `autoclicker-linux-*-standalone.tar.gz` da release:
+Extraia o `jcl-clicker-linux-*-standalone.tar.gz` da release:
 
 ```bash
-tar -xzf autoclicker-linux-*-standalone.tar.gz
-cd autoclicker
+tar -xzf jcl-clicker-linux-*-standalone.tar.gz
+cd jcl-clicker
 chmod +x install.sh
 ./install.sh
 ```
 
-O script instala em `~/.local/opt/autoclicker/` e registra o atalho no menu do sistema.
+O script instala em `~/.local/opt/jcl-clicker/` e registra o atalho no menu do sistema.
+
+> **Nota sobre tamanho:** standalone e AppImage embutem Python + GTK4
+> inteiros — é o preço de rodarem em qualquer distro sem dependências.
+> Os `.deb`/`.rpm` usam o GTK do sistema e por isso são ~100x menores.
 
 ### A partir do código-fonte (desenvolvimento)
 
 #### 1. Clone o projeto
 
 ```bash
-git clone https://github.com/JotinhaGamer22/AutoClicker-Linux.git
+git clone https://github.com/jotaomh/AutoClicker-Linux.git
 cd AutoClicker-Linux
 ```
 
@@ -237,7 +291,7 @@ Os bindings do GTK4 não são instaláveis via pip. O `ydotool`/`ydotoold` já v
 <summary><b>Ubuntu / Pop!_OS / Debian</b></summary>
 
 ```bash
-sudo apt install python3-gi gir1.2-gtk-4.0
+sudo apt install python3-gi gir1.2-gtk-4.0 python3-evdev
 ```
 
 </details>
@@ -246,7 +300,7 @@ sudo apt install python3-gi gir1.2-gtk-4.0
 <summary><b>Fedora</b></summary>
 
 ```bash
-sudo dnf install python3-gobject gtk4
+sudo dnf install python3-gobject gtk4 python3-evdev
 ```
 
 </details>
@@ -255,7 +309,7 @@ sudo dnf install python3-gobject gtk4
 <summary><b>Arch Linux / Manjaro</b></summary>
 
 ```bash
-sudo pacman -S python-gobject gtk4
+sudo pacman -S python-gobject gtk4 python-evdev
 ```
 
 </details>
@@ -264,7 +318,7 @@ sudo pacman -S python-gobject gtk4
 <summary><b>openSUSE</b></summary>
 
 ```bash
-sudo zypper install python3-gobject gtk4
+sudo zypper install python3-gobject gtk4 python3-evdev
 ```
 
 </details>
@@ -289,8 +343,17 @@ Faça **logout/login** (ou reinicie) para a mudança de grupo ter efeito.
 ## Executando
 
 ```bash
+jcl-clicker            # instalado via .deb/.rpm/standalone
+```
+
+ou, do source:
+
+```bash
 python3 -m app.main
 ```
+
+> **Depuração:** `JCL_CLICKER_DEBUG=1` registra no stderr qual binário
+> ydotool/vendor está em uso e o caminho do socket do daemon.
 
 ---
 
@@ -308,6 +371,7 @@ Veja a seção [5. Permissão de input (Wayland)](#5-permissão-de-input-wayland
 ## Executando testes
 
 ```bash
+python3 -m pytest tests/test_xdg_config.py
 python3 -m tests.test_click
 python3 -m tests.test_clicker
 python3 -m tests.test_config
@@ -315,8 +379,10 @@ python3 -m tests.test_mouse
 python3 -m tests.test_save_config
 python3 -m tests.test_stop
 python3 -m tests.test_x11
-python3 -m tests.test_xdg_config
 ```
+
+> `test_click`, `test_mouse` e `test_x11` executam **cliques reais** na
+> sessão gráfica atual.
 
 ---
 
@@ -339,34 +405,41 @@ Ou, se o venv já existe, edite `venv/pyvenv.cfg` e altere `include-system-site-
 
 ### Clicker "roda" mas não clica em nada no Wayland
 
-Verifique se o socket do `ydotoold` está de fato aceitando conexões e não é um arquivo órfão:
+1. Confirme qual binário/daemon está em uso:
 
-```bash
-rm -f /tmp/.ydotool_socket
-python3 -m app.main
-```
+   ```bash
+   JCL_CLICKER_DEBUG=1 python3 -m app.main
+   ```
 
-O app sobe o daemon vendorizado automaticamente na primeira tentativa de clique.
+   O stderr deve mostrar o ydotool **vendorizado** e o socket em
+   `$XDG_RUNTIME_DIR/jcl-clicker-ydotool.socket`.
+
+2. Verifique o acesso a `/dev/uinput` (seção *Permissão de input*).
+
+3. Se um daemon `ydotoold` do sistema estiver rodando com um dispositivo
+   virtual ativo, pode haver conflito de nome no X11 — encerre-o
+   (`sudo systemctl stop ydotool`) e tente de novo; o app prefere sempre o
+   daemon vendorizado.
 
 ---
 
 ## Próximos passos
 
-### Rebranding (em andamento)
+### Rebranding — **concluído nesta versão**
 
 - [x] Escolher novo nome: **JCL Clicker** (J = Jônatas, C = Corinthians, L = Linux)
-- [ ] Atualizar `application_id` do GTK, `APP_NAME` do config, nome de pacote no `build-packages.sh`, `.desktop`, ícone
-- [ ] Renomear repositório no GitHub
+- [x] Atualizar `application_id` do GTK, `APP_NAME` do config, nome de pacote no `build-packages.sh`, `.desktop`, ícone
+- [x] Renomear repositório no GitHub (jotaomh/AutoClicker-Linux)
+
+### Empacotamento — **concluído nesta versão**
+
+- [x] Gerar artefatos `.deb`/`.rpm` das releases (`scripts/build-packages.sh`)
+- [x] AppImage (`scripts/build-appimage.sh`)
 
 ### Interface gráfica
 
 - [ ] Redesenho visual da GUI (estilo próprio, além do GTK4 padrão)
 - [ ] Ícone na bandeja do sistema
-
-### Empacotamento
-
-- [ ] Gerar artefatos `.deb`/`.rpm` das releases (script existe em `scripts/build-packages.sh`)
-- [ ] AppImage
 
 ### Funcionalidades
 
