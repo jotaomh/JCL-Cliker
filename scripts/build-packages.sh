@@ -48,11 +48,15 @@ for binary in ydotool ydotoold; do
 done
 cp -a "$REPO_DIR/vendor/ydotool/." "$APP_DIR$APP_ROOT/vendor/ydotool/"
 
-# --- libs puras de pip vendorizadas (leves); GTK4 fica por conta do sistema ---
-grep -viE '^(pygobject|pyinstaller)' "$REPO_DIR/requirements.txt" \
-    > "$BUILD_DIR/requirements-runtime.txt"
-"$PY" -m pip install --quiet --no-compile --target "$APP_DIR$APP_ROOT/lib" \
-    -r "$BUILD_DIR/requirements-runtime.txt"
+# --- libs puras de pip vendorizadas (leves); GTK4 e evdev ficam por conta do
+# sistema. --no-deps é essencial: o pynput declara evdev>=1.3 como dependência
+# transitiva no Linux, mas o evdev tem extensão C presa à versão do Python e
+# por isso vem do pacote nativo da distro (python3-evdev), não daqui.
+grep -iE '^(pynput|python-xlib|six)==' "$REPO_DIR/requirements.txt" \
+    > "$BUILD_DIR/requirements-vendored.txt"
+"$PY" -m pip install --quiet --no-compile --no-deps \
+    --target "$APP_DIR$APP_ROOT/lib" \
+    -r "$BUILD_DIR/requirements-vendored.txt"
 
 # --- launcher fino em /usr/bin ---
 cat > "$APP_DIR/usr/bin/$BIN_NAME" << LAUNCHER
@@ -85,7 +89,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: amd64
-Depends: python3, python3-gi, gir1.2-gtk-4.0
+Depends: python3, python3-gi, gir1.2-gtk-4.0, python3-evdev
 Recommends: ydotool
 Maintainer: jotaomh <https://github.com/jotaomh>
 Description: JCL Clicker - automação de cliques de mouse para Linux
@@ -117,6 +121,7 @@ cat > "$RPMBUILD/SPECS/jcl-clicker.spec" << EOF
 %define _enable_debug_packages 0
 %define debug_package %{nil}
 %define _missing_build_ids_terminate_build 0
+%define _build_id_links none
 
 Name:           jcl-clicker
 Version:        ${VERSION}
@@ -127,7 +132,7 @@ URL:            https://github.com/jotaomh/AutoClicker-Linux
 Source0:        jcl-clicker-%{version}.tar.gz
 BuildArch:      x86_64
 AutoReqProv:    no
-Requires:       python3, python3-gobject, gtk4
+Requires:       python3, python3-gobject, gtk4, python3-evdev
 Recommends:     ydotool
 
 %description
