@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-Name=AutoClicker
-Comment=Automação de cliques de mouse para Linux
-Exec=/opt/autoclicker/autoclicker
-Icon=/opt/autoclicker/icon.png
+Name=JCL Clicker
+Comment=Automação de cliques de mouse para Linux (X11 e Wayland)
+Exec=/opt/jcl-clicker/jcl-clicker
+Icon=/opt/jcl-clicker/jcl-clicker.png
 Terminal=false
 Categories=Utility;
