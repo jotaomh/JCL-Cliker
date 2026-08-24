@@ -42,7 +42,19 @@ _VENDOR_DIR = _resolve_vendor_dir()
 _VENDORED_YDOTOOL = os.path.join(_VENDOR_DIR, "ydotool")
 _VENDORED_YDOTOOLD = os.path.join(_VENDOR_DIR, "ydotoold")
 
-_YDOTOOL_SOCKET_PATH = "/tmp/.ydotool_socket"
+def _socket_path():
+    """Socket próprio do app, por usuário.
+
+    Um caminho compartilhado fixo (ex: /tmp/.ydotool_socket) colide com o
+    daemon do sistema: se o socket existir mas não for acessível (dono
+    root, grupo ydotool), o app falharia em vez de subir o daemon
+    vendorizado. XDG_RUNTIME_DIR é tmpfs do próprio usuário (0700).
+    """
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR")
+    if runtime_dir:
+        return os.path.join(runtime_dir, "jcl-clicker-ydotool.socket")
+    return f"/tmp/jcl-clicker-{os.getuid()}-ydotool.socket"
+
 
 # app usa 1=esquerdo, 2=meio, 3=direito
 _YDOTOOL_BUTTON_MAP = {1: "0xC0", 2: "0xC2", 3: "0xC1"}
@@ -95,33 +107,43 @@ def _socket_is_alive(path):
 
 
 def _ensure_daemon_running():
+    """Sobe o ydotoold vendorizado se necessário. True se o socket está acessível."""
     global _daemon_process
 
-    if _socket_is_alive(_YDOTOOL_SOCKET_PATH):
-        return
+    socket_path = _socket_path()
+
+    if _socket_is_alive(socket_path):
+        return True
 
     # arquivo de socket órfão de uma execução anterior: remove antes de subir de novo
-    if os.path.exists(_YDOTOOL_SOCKET_PATH):
+    if os.path.exists(socket_path):
         try:
-            os.remove(_YDOTOOL_SOCKET_PATH)
+            os.remove(socket_path)
         except OSError:
             pass
 
     if not (os.path.isfile(_VENDORED_YDOTOOLD) and os.access(_VENDORED_YDOTOOLD, os.X_OK)):
         _debug_log("ydotoold vendorizado não encontrado, seguindo sem daemon próprio")
-        return  # sem daemon vendorizado, deixa o erro normal acontecer e avisar o usuário
+        return False  # sem daemon vendorizado, deixa o erro normal acontecer e avisar o usuário
 
     _debug_log(f"subindo daemon: {_VENDORED_YDOTOOLD}")
     _daemon_process = subprocess.Popen(
-        [_VENDORED_YDOTOOLD, f"--socket-path={_YDOTOOL_SOCKET_PATH}"],
+        [_VENDORED_YDOTOOLD, f"--socket-path={socket_path}"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
 
-    for _ in range(50):  # espera até 5s o socket aparecer
-        if os.path.exists(_YDOTOOL_SOCKET_PATH):
-            break
+    # espera até 5s o socket ficar de fato acessível (existir não basta:
+    # o daemon pode ainda não estar aceitando conexões)
+    for _ in range(50):
+        if _socket_is_alive(socket_path):
+            return True
+        if _daemon_process.poll() is not None:
+            break  # daemon morreu na inicialização
         time.sleep(0.1)
+
+    _debug_log("daemon não ficou acessível a tempo")
+    return False
 
 
 def get_session():
@@ -148,11 +170,16 @@ def click(button=1):
     # Wayland
     if session == "wayland":
 
-        _ensure_daemon_running()
+        if not _ensure_daemon_running():
+            raise MouseError(
+                "Não foi possível iniciar o ydotoold vendorizado. "
+                "No Wayland o daemon precisa de acesso a /dev/uinput — "
+                "veja a seção 'Permissão de input (Wayland)' no README."
+            )
         _log_ydotool_source()
 
         env = os.environ.copy()
-        env["YDOTOOL_SOCKET"] = _YDOTOOL_SOCKET_PATH
+        env["YDOTOOL_SOCKET"] = _socket_path()
 
         try:
             subprocess.run(
@@ -211,11 +238,16 @@ def click_burst(button=1, count=1, interval=0.1, running_flag=None, on_click=Non
             f"Botão inválido: {button}. Use 1 (esquerdo), 2 (meio) ou 3 (direito)."
         )
 
-    _ensure_daemon_running()
+    if not _ensure_daemon_running():
+        raise MouseError(
+            "Não foi possível iniciar o ydotoold vendorizado. "
+            "No Wayland o daemon precisa de acesso a /dev/uinput — "
+            "veja a seção 'Permissão de input (Wayland)' no README."
+        )
     _log_ydotool_source()
 
     env = os.environ.copy()
-    env["YDOTOOL_SOCKET"] = _YDOTOOL_SOCKET_PATH
+    env["YDOTOOL_SOCKET"] = _socket_path()
 
     clicked = 0
     try:
