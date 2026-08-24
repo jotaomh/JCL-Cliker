@@ -5,7 +5,11 @@ import shutil
 from pathlib import Path
 
 
-APP_NAME = "autoclicker"
+APP_NAME = "jcl-clicker"
+
+# nome usado antes do rebranding; configs de instalações antigas
+# (~/.config/autoclicker/) são migradas para o novo diretório
+LEGACY_APP_NAME = "autoclicker"
 
 DEFAULT_CONFIG = {
     "interval": 0.1,
@@ -30,15 +34,31 @@ def _config_file() -> Path:
     return _config_dir() / "config.json"
 
 
-def _legacy_config_file() -> Path:
-    return Path(__file__).parent.parent / "config.json"
+def _legacy_config_files():
+    """Locais de configs legados que podem existir de versões anteriores.
+
+    1. config.json na raiz do projeto (versão pré-XDG, só faz sentido em dev)
+    2. ~/.config/autoclicker/ (instalação anterior ao rebranding p/ JCL Clicker)
+    """
+    repo_root = Path(__file__).parent.parent
+    return [
+        repo_root / "config.json",
+        _xdg_config_home() / LEGACY_APP_NAME / "config.json",
+    ]
 
 
 def _migrate_if_needed():
     new = _config_file()
-    old = _legacy_config_file()
-    if new.exists() or not old.exists():
+    if new.exists():
         return
+
+    candidates = [old for old in _legacy_config_files() if old.is_file()]
+    if not candidates:
+        return
+
+    # se houver mais de um config legado, prevalece o modificado por último
+    old = max(candidates, key=lambda path: path.stat().st_mtime)
+
     try:
         _config_dir().mkdir(parents=True, exist_ok=True)
         shutil.copy2(old, new)
