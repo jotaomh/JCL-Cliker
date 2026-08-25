@@ -65,7 +65,10 @@ a = Analysis(
         (os.path.join(REPO, "vendor", "ydotool", "ydotool"), "vendor/ydotool"),
         (os.path.join(REPO, "vendor", "ydotool", "ydotoold"), "vendor/ydotool"),
     ],
-    datas=[],
+    # asset de UI do cabeçalho (app/gui.py resolve via sys._MEIPASS)
+    datas=[
+        (os.path.join(REPO, "app", "assets", "corinthians.png"), "app/assets"),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={

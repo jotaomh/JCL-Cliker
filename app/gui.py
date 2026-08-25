@@ -1,3 +1,6 @@
+import os
+import sys
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -12,6 +15,33 @@ from .state import ClickerState
 
 BUTTON_LABELS = ["Esquerdo", "Meio", "Direito"]
 BUTTON_VALUES = [1, 2, 3]
+
+# asset de UI exibido no cabeçalho da janela (não é o ícone do app)
+LOGO_ASSET = "corinthians.png"
+
+
+def resolve_asset_path(name):
+    """Localiza um asset de UI em todos os modos de execução.
+
+    Mesma estratégia do _resolve_vendor_dir (app/mouse.py):
+    - PyInstaller (--onefile): datas viram arquivos em sys._MEIPASS
+    - source (dev) e instalação .deb/.rpm: assets/ fica dentro do próprio
+      pacote app (ex: /usr/lib/jcl-clicker/app/assets/)
+    """
+    candidates = []
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "app", "assets", name))
+
+    package_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates.append(os.path.join(package_dir, "assets", name))
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    return None
 
 HOTKEY_NAMES = list(KEY_MAP.keys())
 HOTKEY_LABELS = [name.upper().replace("_", " ") for name in HOTKEY_NAMES]
@@ -38,6 +68,11 @@ THEME_CSS = {
             color: #ff7373;
             font-weight: bold;
         }
+        .logo {
+            background-color: #f2f2f2;
+            border-radius: 10px;
+            padding: 4px;
+        }
     """,
     "light": """
         window {
@@ -47,6 +82,9 @@ THEME_CSS = {
         label.error {
             color: #b80000;
             font-weight: bold;
+        }
+        .logo {
+            background-color: transparent;
         }
     """,
 }
@@ -88,6 +126,19 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         root.set_margin_start(16)
         root.set_margin_end(16)
         self.set_child(root)
+
+        # Logo de destaque (cabeçalho)
+        logo_path = resolve_asset_path(LOGO_ASSET)
+        if logo_path:
+            logo = Gtk.Picture.new_for_filename(logo_path)
+            logo.set_content_fit(Gtk.ContentFit.CONTAIN)
+            logo.set_can_shrink(True)
+            logo.set_size_request(-1, 72)
+            logo.set_halign(Gtk.Align.CENTER)
+            # o escudo tem traços pretos: no tema escuro ganha um cartão
+            # claro por trás (classe .logo no CSS de cada tema)
+            logo.add_css_class("logo")
+            root.append(logo)
 
         # Tema claro/escuro
         root.append(self._build_row(
