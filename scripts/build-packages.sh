@@ -128,7 +128,7 @@ Version:        ${VERSION}
 Release:        1%{?dist}
 Summary:        JCL Clicker - automação de cliques de mouse para Linux
 License:        MIT
-URL:            https://github.com/jotaomh/AutoClicker-Linux
+URL:            https://github.com/jotaomh/JCL-Cliker
 Source0:        jcl-clicker-%{version}.tar.gz
 BuildArch:      x86_64
 AutoReqProv:    no

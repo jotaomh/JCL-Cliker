@@ -57,7 +57,7 @@ Versão atual: **v0.8.0**
 
 - Base funcional com suporte X11/Wayland, interface GTK4, atalho global de teclado
 
-> Notas de release completas em [RELEASE_NOTES.md](RELEASE_NOTES.md).
+> Notas de release completas na [página de releases do GitHub](https://github.com/jotaomh/JCL-Cliker/releases).
 
 ---
 
@@ -133,9 +133,11 @@ Se houver mais de um, prevalece o modificado por último.
 ## Estrutura do projeto
 
 ```
-AutoClicker-Linux
+JCL-Cliker
 ├── app/
 │   ├── __init__.py
+│   ├── assets/
+│   │   └── corinthians.png          (logo exibido no cabeçalho da janela)
 │   ├── clicker.py
 │   ├── config.py
 │   ├── gui.py
@@ -167,11 +169,9 @@ AutoClicker-Linux
 ├── tests/
 │   └── ...
 │
-├── RELEASE_NOTES.md
 ├── README.md
 ├── config.json                      (legado, migrado no primeiro uso)
-├── requirements.txt
-└── requirements-dev.txt
+└── requirements.txt
 ```
 
 ---
@@ -266,8 +266,8 @@ O script instala em `~/.local/opt/jcl-clicker/` e registra o atalho no menu do s
 #### 1. Clone o projeto
 
 ```bash
-git clone https://github.com/jotaomh/AutoClicker-Linux.git
-cd AutoClicker-Linux
+git clone https://github.com/jotaomh/JCL-Cliker.git
+cd JCL-Cliker
 ```
 
 #### 2. Crie e ative o ambiente virtual
@@ -429,7 +429,7 @@ Ou, se o venv já existe, edite `venv/pyvenv.cfg` e altere `include-system-site-
 
 - [x] Escolher novo nome: **JCL Clicker** (J = Jônatas, C = Corinthians, L = Linux)
 - [x] Atualizar `application_id` do GTK, `APP_NAME` do config, nome de pacote no `build-packages.sh`, `.desktop`, ícone
-- [x] Renomear repositório no GitHub (jotaomh/AutoClicker-Linux)
+- [x] Renomear repositório no GitHub (jotaomh/JCL-Cliker)
 
 ### Empacotamento — **concluído nesta versão**
 

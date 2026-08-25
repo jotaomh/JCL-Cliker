@@ -58,7 +58,7 @@ repositório para configurar a permissão (grupo input).
 
 Repositório
 -----------
-  https://github.com/jotaomh/AutoClicker-Linux
+  https://github.com/jotaomh/JCL-Cliker
 
 Licença
 -------
