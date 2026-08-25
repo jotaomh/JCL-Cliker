@@ -15,7 +15,8 @@ DEFAULT_CONFIG = {
     "interval": 0.1,
     "button": 1,
     "amount": 0,
-    "hotkey": "f6"
+    "hotkey": "f6",
+    "theme": "dark"
 }
 
 
@@ -40,6 +41,9 @@ def _sanitize(config):
 
     if not isinstance(config.get("hotkey"), str):
         config["hotkey"] = DEFAULT_CONFIG["hotkey"]
+
+    if config.get("theme") not in ("light", "dark"):
+        config["theme"] = DEFAULT_CONFIG["theme"]
 
     return config
 

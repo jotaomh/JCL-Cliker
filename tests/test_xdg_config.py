@@ -23,7 +23,13 @@ def test_app_name_is_rebranded():
 
 def test_save_and_load_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    original = {"interval": 0.5, "button": 2, "amount": 10, "hotkey": "f7"}
+    original = {
+        "interval": 0.5,
+        "button": 2,
+        "amount": 10,
+        "hotkey": "f7",
+        "theme": "light",
+    }
     save_config(original)
     loaded = load_config()
     assert loaded == original

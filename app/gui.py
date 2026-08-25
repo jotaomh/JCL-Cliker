@@ -24,6 +24,46 @@ STATUS_TEXT = {
     ClickerState.ERROR: "Erro",
 }
 
+# Cores próprias de fundo/texto por tema: garante contraste legível mesmo
+# em distros sem a variante escura do tema instalada (o prefer-dark sozinho
+# não escurece nada nesses sistemas). Controles (spin/dropdown/botão)
+# continuam com o tema do sistema; labels herdam a cor da janela.
+THEME_CSS = {
+    "dark": """
+        window {
+            background-color: #20202b;
+            color: #f3f3f8;
+        }
+        label.error {
+            color: #ff7373;
+            font-weight: bold;
+        }
+    """,
+    "light": """
+        window {
+            background-color: #f6f6f9;
+            color: #17171d;
+        }
+        label.error {
+            color: #b80000;
+            font-weight: bold;
+        }
+    """,
+}
+
+# provider criado no do_startup (precisa de display) e recarregado a cada
+# troca de tema — load_from_string substitui o conteúdo anterior
+_CSS_PROVIDER = None
+
+
+def apply_theme(dark):
+    """Aplica o tema claro/escuro na aplicação inteira."""
+    settings = Gtk.Settings.get_default()
+    if settings:
+        settings.set_property("gtk-application-prefer-dark-theme", bool(dark))
+    if _CSS_PROVIDER is not None:
+        _CSS_PROVIDER.load_from_string(THEME_CSS["dark" if dark else "light"])
+
 
 class JCLClickerWindow(Gtk.ApplicationWindow):
 
@@ -48,6 +88,12 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         root.set_margin_start(16)
         root.set_margin_end(16)
         self.set_child(root)
+
+        # Tema claro/escuro
+        root.append(self._build_row(
+            "Tema escuro:",
+            self._build_theme_switch(),
+        ))
 
         # Intervalo
         root.append(self._build_row(
@@ -99,9 +145,18 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         self.toggle_button.connect("clicked", self._on_toggle_clicked)
         root.append(self.toggle_button)
 
+        self._apply_saved_theme()
         self._start_hotkey_listener()
 
     # ---------- construção dos campos ----------
+
+    def _build_theme_switch(self):
+        switch = Gtk.Switch()
+        dark = self.config.get("theme", "dark") == "dark"
+        switch.set_active(dark)
+        switch.connect("notify::active", self._on_theme_toggled)
+        self.theme_switch = switch
+        return switch
 
     def _build_row(self, label_text, widget):
         row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
@@ -169,6 +224,12 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         return dropdown
 
     # ---------- handlers de configuração ----------
+
+    def _on_theme_toggled(self, switch, _param):
+        dark = switch.get_active()
+        self.config["theme"] = "dark" if dark else "light"
+        save_config(self.config)
+        apply_theme(dark)
 
     def _on_interval_changed(self, spin):
         self.config["interval"] = round(spin.get_value(), 2)
@@ -243,6 +304,11 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         self.button_dropdown.set_sensitive(sensitive)
         self.amount_spin.set_sensitive(sensitive)
 
+    # ---------- tema ----------
+
+    def _apply_saved_theme(self):
+        apply_theme(self.config.get("theme", "dark") == "dark")
+
     # ---------- atalho global ----------
 
     def _start_hotkey_listener(self):
@@ -281,14 +347,6 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         return False  # permite o fechamento normal da janela
 
 
-CSS = """
-label.error {
-    color: #cc0000;
-    font-weight: bold;
-}
-"""
-
-
 class JCLClickerApp(Gtk.Application):
 
     def __init__(self):
@@ -303,11 +361,12 @@ class JCLClickerApp(Gtk.Application):
     def do_startup(self):
         Gtk.Application.do_startup(self)
 
-        provider = Gtk.CssProvider()
-        provider.load_from_string(CSS)
+        global _CSS_PROVIDER
+        _CSS_PROVIDER = Gtk.CssProvider()
+        _CSS_PROVIDER.load_from_string(THEME_CSS["light"])
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(),
-            provider,
+            _CSS_PROVIDER,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
         )
 
