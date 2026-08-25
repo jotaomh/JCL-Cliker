@@ -10,6 +10,7 @@ from gi.repository import Gio, GLib, Gtk, Gdk
 from .clicker import JCLClicker
 from .config import load_config, save_config
 from .hotkeys import GlobalHotkey, HotkeyError, KEY_MAP
+from .mouse import get_session, run_setup_script
 from .state import ClickerState
 
 
@@ -191,6 +192,12 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         self.error_label.set_visible(False)
         root.append(self.error_label)
 
+        # Botão "Corrigir permissões" (escondido, aparece só no Wayland com erro)
+        self.fix_perms_button = Gtk.Button(label="Corrigir permissões")
+        self.fix_perms_button.connect("clicked", self._on_fix_perms_clicked)
+        self.fix_perms_button.set_visible(False)
+        root.append(self.fix_perms_button)
+
         # Botão iniciar/parar
         self.toggle_button = Gtk.Button(label="Iniciar")
         self.toggle_button.connect("clicked", self._on_toggle_clicked)
@@ -313,6 +320,7 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
 
         self.error_label.set_visible(False)
         self.error_label.set_text("")
+        self.fix_perms_button.set_visible(False)
 
         self.bot = JCLClicker(
             interval=self.config["interval"],
@@ -338,6 +346,12 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
             message = value[len("error: "):]
             self.error_label.set_text(message)
             self.error_label.set_visible(True)
+            # Mostra botão de correção apenas para erros de permissão Wayland
+            is_wayland_permission_error = (
+                get_session() == "wayland"
+                and "/dev/uinput" in message
+            )
+            self.fix_perms_button.set_visible(is_wayland_permission_error)
             self._finish_run(ClickerState.ERROR)
 
         elif value == "finished":
@@ -349,6 +363,40 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
         self.toggle_button.set_label("Iniciar")
         self.status_label.set_text(STATUS_TEXT.get(state, "Pronto"))
         self._set_inputs_sensitive(True)
+        if state != ClickerState.ERROR:
+            self.fix_perms_button.set_visible(False)
+
+    def _on_fix_perms_clicked(self, _button):
+        """Executa o script de configuração de permissões via pkexec/sudo."""
+        self.fix_perms_button.set_sensitive(False)
+        self.fix_perms_button.set_label("Configurando...")
+        self.error_label.set_visible(False)
+
+        import threading
+
+        def _run():
+            success, output = run_setup_script()
+            GLib.idle_add(self._on_fix_perms_done, success, output)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_fix_perms_done(self, success, output):
+        self.fix_perms_button.set_sensitive(True)
+        self.fix_perms_button.set_label("Corrigir permissões")
+
+        if success:
+            self.error_label.set_text(
+                "Permissões configuradas com sucesso!\n"
+                "Se o grupo 'input' acabou de ser adicionado, faça logout/login para aplicar."
+            )
+            self.error_label.set_visible(True)
+            self.fix_perms_button.set_visible(False)
+        else:
+            msg = output.strip() if output else "Erro desconhecido."
+            self.error_label.set_text(f"Falha ao configurar permissões:\n{msg}")
+            self.error_label.set_visible(True)
+
+        return False
 
     def _set_inputs_sensitive(self, sensitive):
         self.interval_spin.set_sensitive(sensitive)

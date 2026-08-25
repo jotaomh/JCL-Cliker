@@ -356,16 +356,52 @@ sudo zypper install python3-gobject gtk4 python3-evdev
 
 #### 5. Permissão de input (Wayland)
 
-O `ydotoold` precisa acessar `/dev/uinput` no Wayland. Crie a regra `udev` e adicione seu usuário ao grupo `input`:
+No Wayland, o `ydotoold` precisa acessar `/dev/uinput`. Isso requer três coisas: o módulo `uinput` carregado, uma regra `udev` no device e o usuário no grupo `input`.
+
+##### Configuração automática (recomendado)
+
+Execute o script de setup incluído no repositório:
 
 ```bash
-echo 'KERNEL=="uinput", GROUP="input", MODE="0660"' | sudo tee /etc/udev/rules.d/80-uinput.rules
-sudo udevadm control --reload-rules
-sudo udevadm trigger
-sudo usermod -aG input $USER
+sudo ./scripts/setup-uinput.sh
 ```
 
-Faça **logout/login** (ou reinicie) para a mudança de grupo ter efeito.
+O script carrega o módulo uinput (com persistência no boot), cria a regra udev, adiciona seu usuário ao grupo `input` e recarrega as regras.
+
+> **Nota:** Se o grupo `input` acabou de ser adicionado ao seu usuário, faça **logout/login** (ou reinicie) para que a mudança tenha efeito.
+
+Ao usar o app pela primeira vez no Wayland, se as permissões não estiverem configuradas, o JCL Clicker mostra um diagnóstico específico do problema e oferece um botão **"Corrigir permissões"** que executa o script automaticamente.
+
+##### Configuração manual (fallback)
+
+Se a automação não funcionar, execute manualmente:
+
+```bash
+# 1. Carregar módulo uinput
+sudo modprobe uinput
+echo 'uinput' | sudo tee /etc/modules-load.d/uinput.conf
+
+# 2. Criar regra udev
+echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/99-jcl-clicker.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --name-match=uinput
+
+# 3. Adicionar ao grupo input
+sudo usermod -aG input $USER
+
+# 4. Aplicar: faça logout/login ou reinicie
+```
+
+##### Diagnóstico
+
+O app diagnostica automaticamente qual dos três requisitos está faltando:
+
+| Problema | Mensagem no app |
+|---|---|
+| Módulo uinput não carregado | Módulo uinput não carregado |
+| /dev/uinput não existe ou sem permissão | Sem permissão de leitura/escrita em /dev/uinput |
+| Usuário não está no grupo input | Usuário não pertence ao grupo 'input' |
+| Regra udev ausente | Regra udev para uinput ausente |
 
 > **Nota:** No X11 essa etapa não é necessária.
 

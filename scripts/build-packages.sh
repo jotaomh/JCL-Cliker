@@ -32,6 +32,7 @@ mkdir -p "$APP_DIR/usr/bin" \
          "$APP_DIR$APP_ROOT/app" \
          "$APP_DIR$APP_ROOT/lib" \
          "$APP_DIR$APP_ROOT/vendor/ydotool" \
+         "$APP_DIR$APP_ROOT/scripts" \
          "$APP_DIR/usr/share/applications" \
          "$APP_DIR/usr/share/icons/hicolor/256x256/apps"
 
@@ -47,6 +48,10 @@ for binary in ydotool ydotoold; do
     fi
 done
 cp -a "$REPO_DIR/vendor/ydotool/." "$APP_DIR$APP_ROOT/vendor/ydotool/"
+
+# --- script de setup de permissões Wayland ---
+cp "$REPO_DIR/scripts/setup-uinput.sh" "$APP_DIR$APP_ROOT/scripts/setup-uinput.sh"
+chmod 755 "$APP_DIR$APP_ROOT/scripts/setup-uinput.sh"
 
 # --- libs puras de pip vendorizadas (leves); GTK4 e evdev ficam por conta do
 # sistema. --no-deps é essencial: o pynput declara evdev>=1.3 como dependência

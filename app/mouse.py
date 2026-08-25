@@ -8,6 +8,7 @@ VALID_BUTTONS = {1, 2, 3}
 
 # caminho fixo usado por instalações via .deb/.rpm (scripts/build-packages.sh)
 _SYSTEM_VENDOR_DIR = "/usr/lib/jcl-clicker/vendor/ydotool"
+_SYSTEM_SETUP_SCRIPT = "/usr/lib/jcl-clicker/scripts/setup-uinput.sh"
 
 
 def _resolve_vendor_dir():
@@ -41,6 +42,156 @@ _VENDOR_DIR = _resolve_vendor_dir()
 
 _VENDORED_YDOTOOL = os.path.join(_VENDOR_DIR, "ydotool")
 _VENDORED_YDOTOOLD = os.path.join(_VENDOR_DIR, "ydotoold")
+
+
+def _resolve_setup_script():
+    """Localiza o script de configuração de permissões (setup-uinput.sh)."""
+    candidates = []
+
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        candidates.append(os.path.join(meipass, "scripts", "setup-uinput.sh"))
+
+    # ao lado do executável (standalone / tarball)
+    exe_dir = os.path.dirname(os.path.realpath(sys.argv[0]))
+    candidates.append(os.path.join(exe_dir, "setup-uinput.sh"))
+
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidates.append(os.path.join(base, "scripts", "setup-uinput.sh"))
+
+    candidates.append(_SYSTEM_SETUP_SCRIPT)
+
+    for candidate in candidates:
+        if os.path.isfile(candidate):
+            return candidate
+
+    return candidates[-1]
+
+
+_SETUP_SCRIPT = _resolve_setup_script()
+
+
+class UinputDiagnosis:
+    """Resultado da diagnóstico de permissões uinput para Wayland."""
+
+    def __init__(self):
+        self.module_loaded = False
+        self.device_exists = False
+        self.device_accessible = False
+        self.in_input_group = False
+        self.udev_rule_exists = False
+
+    @property
+    def ok(self):
+        return all([
+            self.module_loaded,
+            self.device_exists,
+            self.device_accessible,
+            self.in_input_group,
+            self.udev_rule_exists,
+        ])
+
+    @property
+    def problems(self):
+        """Lista de problemas encontrados (strings em português)."""
+        issues = []
+        if not self.module_loaded:
+            issues.append("Módulo uinput não carregado")
+        if not self.device_exists:
+            issues.append("/dev/uinput não existe")
+        elif not self.device_accessible:
+            issues.append("Sem permissão de leitura/escrita em /dev/uinput")
+        if not self.in_input_group:
+            issues.append("Usuário não pertence ao grupo 'input'")
+        if not self.udev_rule_exists:
+            issues.append("Regra udev para uinput ausente")
+        return issues
+
+    @property
+    def message(self):
+        """Mensagem descritiva do diagnóstico."""
+        if self.ok:
+            return "Permissões de input OK"
+        return "; ".join(self.problems)
+
+
+def diagnose_uinput():
+    """Verifica as permissões necessárias para ydotoold no Wayland."""
+    diag = UinputDiagnosis()
+
+    # 1. Módulo uinput carregado ou built-in no kernel?
+    #    Módulo built-in (=y no .config) não aparece no lsmod, mas cria
+    #    /dev/uinput. Verificamos o lsmod primeiro; se não encontrar,
+    #    verificamos se o device existe (indica módulo built-in).
+    try:
+        result = subprocess.run(
+            ["lsmod"], capture_output=True, text=True, timeout=5,
+        )
+        lsmod_loaded = any(
+            line.startswith("uinput ") or line.startswith("uinput\t")
+            for line in result.stdout.splitlines()
+        )
+    except Exception:
+        lsmod_loaded = False
+
+    # Se lsmod não mostra, verifica se /dev/uinput existe (built-in)
+    if lsmod_loaded:
+        diag.module_loaded = True
+    else:
+        diag.module_loaded = os.path.exists("/dev/uinput")
+
+    # 2. /dev/uinput existe?
+    diag.device_exists = os.path.exists("/dev/uinput")
+
+    # 3. Acessível?
+    if diag.device_exists:
+        diag.device_accessible = os.access("/dev/uinput", os.R_OK | os.W_OK)
+
+    # 4. Usuário no grupo input?
+    try:
+        result = subprocess.run(
+            ["id", "-nG"], capture_output=True, text=True, timeout=5,
+        )
+        groups = result.stdout.strip().split()
+        diag.in_input_group = "input" in groups
+    except Exception:
+        pass
+
+    # 5. Regra udev existe?
+    diag.udev_rule_exists = (
+        os.path.isfile("/etc/udev/rules.d/99-jcl-clicker.rules")
+        or os.path.isfile("/etc/udev/rules.d/80-uinput.rules")
+    )
+
+    _debug_log(f"diagnóstico uinput: {diag.message}")
+    return diag
+
+
+def run_setup_script():
+    """Executa o script de setup de permissões via pkexec/sudo.
+
+    Retorna (success: bool, output: str).
+    """
+    if not os.path.isfile(_SETUP_SCRIPT):
+        return False, f"Script de setup não encontrado: {_SETUP_SCRIPT}"
+
+    sudo_bin = shutil.which("pkexec") or shutil.which("sudo")
+    if not sudo_bin:
+        return False, "Nenhum elevador de privilégio encontrado (pkexec/sudo)."
+
+    try:
+        result = subprocess.run(
+            [sudo_bin, _SETUP_SCRIPT],
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode == 0:
+            return True, result.stdout
+        return False, result.stderr or result.stdout or "Comando cancelado pelo usuário."
+    except subprocess.TimeoutExpired:
+        return False, "Timeout ao executar script de configuração."
+    except Exception as e:
+        return False, str(e)
+
 
 def _socket_path():
     """Socket próprio do app, por usuário.
@@ -150,6 +301,26 @@ def get_session():
     return os.environ.get("XDG_SESSION_TYPE", "")
 
 
+def _build_wayland_error(diag):
+    """Constrói mensagem de erro detalhada para falha de permissão Wayland."""
+    lines = [
+        "Não foi possível iniciar o ydotoold. Permissões insuficientes para /dev/uinput.",
+        "",
+    ]
+    for problem in diag.problems:
+        lines.append(f"  • {problem}")
+
+    lines.append("")
+    lines.append(
+        "Execute o script de configuração para resolver automaticamente:"
+    )
+    lines.append(f"  sudo {_SETUP_SCRIPT}")
+    lines.append("")
+    lines.append("Ou consulte a seção 'Permissão de input (Wayland)' no README.")
+
+    return "\n".join(lines)
+
+
 def _get_x11_controller():
     global _x11_controller
     if _x11_controller is None:
@@ -171,10 +342,9 @@ def click(button=1):
     if session == "wayland":
 
         if not _ensure_daemon_running():
+            diag = diagnose_uinput()
             raise MouseError(
-                "Não foi possível iniciar o ydotoold vendorizado. "
-                "No Wayland o daemon precisa de acesso a /dev/uinput — "
-                "veja a seção 'Permissão de input (Wayland)' no README."
+                _build_wayland_error(diag)
             )
         _log_ydotool_source()
 
@@ -239,10 +409,9 @@ def click_burst(button=1, count=1, interval=0.1, running_flag=None, on_click=Non
         )
 
     if not _ensure_daemon_running():
+        diag = diagnose_uinput()
         raise MouseError(
-            "Não foi possível iniciar o ydotoold vendorizado. "
-            "No Wayland o daemon precisa de acesso a /dev/uinput — "
-            "veja a seção 'Permissão de input (Wayland)' no README."
+            _build_wayland_error(diag)
         )
     _log_ydotool_source()
 

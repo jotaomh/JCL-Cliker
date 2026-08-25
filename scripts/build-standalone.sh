@@ -140,8 +140,9 @@ JCL_REPO_DIR="$REPO_DIR" "$PY" -m PyInstaller \
 cp "$REPO_DIR/packaging/standalone/autoclicker.desktop" "$STAGE_DIR/"
 cp "$REPO_DIR/packaging/standalone/install.sh" "$STAGE_DIR/"
 cp "$REPO_DIR/packaging/standalone/README.txt" "$STAGE_DIR/"
+cp "$REPO_DIR/scripts/setup-uinput.sh" "$STAGE_DIR/"
 cp "$ICON_SRC" "$STAGE_DIR/$ICON_NAME"
-chmod +x "$STAGE_DIR/install.sh"
+chmod +x "$STAGE_DIR/install.sh" "$STAGE_DIR/setup-uinput.sh"
 
 cd "$BUILD_DIR"
 TARBALL="$REPO_DIR/dist/jcl-clicker-linux-${VERSION}-standalone.tar.gz"
