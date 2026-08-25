@@ -8,11 +8,35 @@ Projeto desenvolvido em Python com foco em compatibilidade com diferentes ambien
 
 ## Status
 
-Versão atual: **v0.8.0**
+Versão atual: **v0.9.0**
 
 ---
 
 ## Changelog
+
+### v0.9.0 — tema claro/escuro, logo na interface e bugs de abertura corrigidos
+
+- **Corrigido (crítico): o app às vezes "não abria"** — uma instância
+  anterior (mesmo apontando para um display morto ou de outra sessão)
+  segurava o nome da aplicação no D-Bus e toda nova execução saía
+  silenciosamente, sem abrir janela. Agora cada execução é independente
+  (`GApplication NON_UNIQUE`) e sempre abre sua janela.
+- **Corrigido:** fechar a janela com o clicker rodando podia deixar callbacks
+  GTK pendentes após a destruição da janela — o fechamento agora para o
+  clicker e aguarda a thread terminar (com timeout).
+- **Corrigido:** `config.json` válido mas com tipos errados (ex:
+  `"interval": "0.5"`) derrubava o app com `TypeError` no startup — o config
+  agora é sanitizado (tipos e faixas) na leitura.
+- **Tema claro/escuro**: switch "Tema escuro" no topo da janela; aplica o
+  `prefer-dark` do GTK e complementa com CSS próprio (fundo/texto) para
+  contraste garantido mesmo sem a variante escura do tema instalada.
+  Preferência salva em `config.json` (`theme`).
+- **Logo do Corinthians no cabeçalho** da janela (`Gtk.Picture`, proporção
+  preservada, com cartão claro no tema escuro). Asset incluído em todos os
+  alvos: source, `.deb`, `.rpm`, standalone e AppImage.
+- **Limpeza do nome antigo do repositório**: todas as referências a
+  `AutoClicker-Linux` atualizadas para `jotaomh/JCL-Cliker` (README, README
+  do standalone, spec do `.rpm`).
 
 ### v0.8.0 — rebranding JCL Clicker + pacotamento consertado
 
@@ -57,7 +81,7 @@ Versão atual: **v0.8.0**
 
 - Base funcional com suporte X11/Wayland, interface GTK4, atalho global de teclado
 
-> Notas de release completas na [página de releases do GitHub](https://github.com/jotaomh/JCL-Cliker/releases).
+> Notas de release completas em [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ---
 
@@ -72,6 +96,8 @@ Versão atual: **v0.8.0**
 ✅ Configuração salva em `~/.config/jcl-clicker/config.json` (XDG)  
 ✅ Execução em thread separada  
 ✅ Interface gráfica em GTK4  
+✅ Tema claro/escuro com switch na interface e persistência da preferência  
+✅ Logo de destaque no cabeçalho da janela  
 ✅ Tratamento de erros (mouse indisponível, ydotool ausente, config corrompida)  
 ✅ Atalho global de teclado para iniciar/parar (F1-F12, Pause, Scroll Lock)
 
@@ -120,6 +146,11 @@ Armazenada em `~/.config/jcl-clicker/config.json` (XDG Base Directory Specificat
 | `button` | `1` | Botão: 1 = esquerdo, 2 = meio, 3 = direito |
 | `amount` | `0` | Quantidade de cliques (0 = infinito) |
 | `hotkey` | `f6` | Atalho global iniciar/parar |
+| `theme` | `dark` | Tema da interface: `dark` (escuro) ou `light` (claro) |
+
+Valores com tipo ou faixa inválidos são substituídos pelo padrão na leitura
+(ex: `"interval": "0.5"` volta para `0.1`) — config malformada nunca impede
+o app de abrir.
 
 Configs legadas são migradas automaticamente na primeira execução:
 
@@ -371,7 +402,12 @@ Veja a seção [5. Permissão de input (Wayland)](#5-permissão-de-input-wayland
 ## Executando testes
 
 ```bash
-python3 -m pytest tests/test_xdg_config.py
+python3 -m pytest tests/
+```
+
+Ou módulo a módulo (alguns executam cliques reais na sessão atual):
+
+```bash
 python3 -m tests.test_click
 python3 -m tests.test_clicker
 python3 -m tests.test_config
@@ -379,6 +415,7 @@ python3 -m tests.test_mouse
 python3 -m tests.test_save_config
 python3 -m tests.test_stop
 python3 -m tests.test_x11
+python3 -m tests.test_xdg_config
 ```
 
 > `test_click`, `test_mouse` e `test_x11` executam **cliques reais** na
@@ -438,6 +475,8 @@ Ou, se o venv já existe, edite `venv/pyvenv.cfg` e altere `include-system-site-
 
 ### Interface gráfica
 
+- [x] Tema claro/escuro com persistência (v0.9.0)
+- [x] Logo de destaque no cabeçalho da janela (v0.9.0)
 - [ ] Redesenho visual da GUI (estilo próprio, além do GTK4 padrão)
 - [ ] Ícone na bandeja do sistema
 
