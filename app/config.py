@@ -19,6 +19,31 @@ DEFAULT_CONFIG = {
 }
 
 
+def _sanitize(config):
+    """Coerção defensiva de tipos: um config.json válido mas com tipos
+    errados (ex: "interval": "0.1" editado à mão) não pode derrubar o app
+    no startup com TypeError dentro do GTK."""
+    interval = config.get("interval")
+    if not isinstance(interval, (int, float)) or isinstance(interval, bool):
+        interval = DEFAULT_CONFIG["interval"]
+    config["interval"] = round(min(max(float(interval), 0.01), 60.0), 2)
+
+    button = config.get("button")
+    if button not in (1, 2, 3):
+        button = DEFAULT_CONFIG["button"]
+    config["button"] = button
+
+    try:
+        config["amount"] = max(0, int(config.get("amount")))
+    except (TypeError, ValueError):
+        config["amount"] = DEFAULT_CONFIG["amount"]
+
+    if not isinstance(config.get("hotkey"), str):
+        config["hotkey"] = DEFAULT_CONFIG["hotkey"]
+
+    return config
+
+
 def _xdg_config_home() -> Path:
     env = os.environ.get("XDG_CONFIG_HOME")
     if env:
@@ -88,7 +113,7 @@ def load_config():
     merged = dict(DEFAULT_CONFIG)
     merged.update(config)
 
-    return merged
+    return _sanitize(merged)
 
 
 def save_config(config):

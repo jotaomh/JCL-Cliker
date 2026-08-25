@@ -2,7 +2,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 
-from gi.repository import Gtk, GLib, Gdk
+from gi.repository import Gio, GLib, Gtk, Gdk
 
 from .clicker import JCLClicker
 from .config import load_config, save_config
@@ -272,6 +272,11 @@ class JCLClickerWindow(Gtk.ApplicationWindow):
 
         if self.bot and self.bot.running:
             self.bot.stop()
+            thread = self.bot.thread
+            if thread and thread.is_alive():
+                # evita que a thread do clicker enfileire callbacks GTK
+                # (idle_add) depois da janela destruída
+                thread.join(timeout=2.0)
 
         return False  # permite o fechamento normal da janela
 
@@ -287,7 +292,13 @@ label.error {
 class JCLClickerApp(Gtk.Application):
 
     def __init__(self):
-        super().__init__(application_id="io.github.jotaomh.jclclicker")
+        super().__init__(
+            application_id="io.github.jotaomh.jclclicker",
+            # Sem isso, uma instância anterior (mesmo apontando para um
+            # display morto ou de outra sessão) mantém o nome no D-Bus e
+            # toda nova execução sai silenciosamente sem abrir janela.
+            flags=Gio.ApplicationFlags.NON_UNIQUE,
+        )
 
     def do_startup(self):
         Gtk.Application.do_startup(self)

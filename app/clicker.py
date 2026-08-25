@@ -30,7 +30,9 @@ class JCLClicker:
         self.error = None
         self.state = ClickerState.RUNNING
 
-        self.thread = threading.Thread(target=self._run)
+        # daemon: o fechamento da janela não pode ficar preso num clique
+        # de subprocesso em andamento (join com timeout é feito na GUI)
+        self.thread = threading.Thread(target=self._run, daemon=True)
 
         self.thread.start()
 
