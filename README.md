@@ -8,11 +8,30 @@ Projeto desenvolvido em Python com foco em compatibilidade com diferentes ambien
 
 ## Status
 
-Versão atual: **v0.9.0**
+Versão atual: **v0.10.0**
 
 ---
 
 ## Changelog
+
+### v0.10.0 — correção automática de permissões Wayland e diagnóstico de erros
+
+- **Corrigido (crítico): ydotoold falhava no Wayland por falta de permissão em `/dev/uinput`**
+  - antes o app mostrava uma mensagem genérica e o usuário não sabia o que fazer
+  - agora o app diagnostica automaticamente qual requisito está faltando:
+    módulo uinput, regra udev, grupo `input` ou permissão do device
+  - botão **"Corrigir permissões"** na interface executa o setup automaticamente
+    via `pkexec`/`sudo` (prompt gráfico de senha, sem terminal)
+  - script `scripts/setup-uinput.sh` incluído em todos os alvos (`.deb`/`.rpm`,
+    standalone, source)
+- **Diagnóstico específico**: cada problema de permissão gera uma mensagem
+  distinta com a lista exata do que está faltando, em vez de uma msg genérica
+- **Script de setup idempotente**: `scripts/setup-uinput.sh` carrega o módulo
+  uinput (com persistência no boot), cria regra udev, adiciona o usuário ao
+  grupo `input` e recarrega regras — seguro para rodar múltiplas vezes
+- **README reescrito** na seção de permissões Wayland: configuração automática
+  (recomendada), fallback manual, tabela de diagnóstico e seção completa de
+  troubleshooting com erros comuns de permissão
 
 ### v0.9.0 — tema claro/escuro, logo na interface e bugs de abertura corrigidos
 
@@ -99,6 +118,7 @@ Versão atual: **v0.9.0**
 ✅ Tema claro/escuro com switch na interface e persistência da preferência  
 ✅ Logo de destaque no cabeçalho da janela  
 ✅ Tratamento de erros (mouse indisponível, ydotool ausente, config corrompida)  
+✅ Diagnóstico de permissões Wayland com correção automática via interface  
 ✅ Atalho global de teclado para iniciar/parar (F1-F12, Pause, Scroll Lock)
 
 ---
@@ -195,7 +215,8 @@ JCL-Cliker
 ├── scripts/
 │   ├── build-packages.sh            (.deb / .rpm — app Python nativo)
 │   ├── build-standalone.sh          (binário standalone via PyInstaller + tar.gz)
-│   └── build-appimage.sh            (AppImage)
+│   ├── build-appimage.sh            (AppImage)
+│   └── setup-uinput.sh             (configuração de permissões Wayland)
 │
 ├── tests/
 │   └── ...
@@ -476,6 +497,50 @@ pip install -r requirements.txt
 
 Ou, se o venv já existe, edite `venv/pyvenv.cfg` e altere `include-system-site-packages = false` para `true`.
 
+---
+
+### Erro ao iniciar no Wayland: "Permissões insuficientes para /dev/uinput"
+
+O ydotoold precisa acessar `/dev/uinput` para simular cliques no Wayland. O app mostra um diagnóstico específico do problema — veja a tabela abaixo:
+
+| Mensagem de erro | Causa | Solução |
+|---|---|---|
+| `Módulo uinput não carregado` | O módulo do kernel não foi carregado e nem está built-in | `sudo modprobe uinput` e configure persistência com `echo uinput \| sudo tee /etc/modules-load.d/uinput.conf` |
+| `/dev/uinput não existe` | Módulo uinput indisponível no kernel | Verifique se o kernel suporta uinput: `grep UINPUT /boot/config-$(uname -r)` deve mostrar `=y` ou `=m` |
+| `Sem permissão de leitura/escrita em /dev/uinput` | O device existe mas o usuário não tem acesso | Execute `sudo ./scripts/setup-uinput.sh` ou veja os passos manuais abaixo |
+| `Usuário não pertence ao grupo 'input'` | Falta adicionar o usuário ao grupo | `sudo usermod -aG input $USER` + **logout/login** |
+| `Regra udev para uinput ausente` | Não há regra udev definindo permissões do device | Execute o script de setup ou crie manualmente (veja abaixo) |
+
+**Solução rápida (automática):**
+
+```bash
+sudo ./scripts/setup-uinput.sh
+```
+
+O script resolve tudo: carrega o módulo, cria a regra udev, adiciona ao grupo `input`. Se o grupo foi adicionado agora, faça **logout/login** para aplicar.
+
+**Solução manual (passo a passo):**
+
+```bash
+# 1. Carregar módulo uinput
+sudo modprobe uinput
+echo 'uinput' | sudo tee /etc/modules-load.d/uinput.conf
+
+# 2. Criar regra udev
+echo 'KERNEL=="uinput", MODE="0660", GROUP="input", OPTIONS+="static_node=uinput"' | sudo tee /etc/udev/rules.d/99-jcl-clicker.rules
+sudo udevadm control --reload-rules
+sudo udevadm trigger --name-match=uinput
+
+# 3. Adicionar ao grupo input
+sudo usermod -aG input $USER
+
+# 4. Aplicar: faça logout/login ou reinicie
+```
+
+**Pela interface gráfica:** ao clicar em "Iniciar" no Wayland com permissões incorretas, o app mostra o diagnóstico e um botão **"Corrigir permissões"** que executa o setup automaticamente (pede senha do sistema).
+
+---
+
 ### Clicker "roda" mas não clica em nada no Wayland
 
 1. Confirme qual binário/daemon está em uso:
@@ -487,12 +552,87 @@ Ou, se o venv já existe, edite `venv/pyvenv.cfg` e altere `include-system-site-
    O stderr deve mostrar o ydotool **vendorizado** e o socket em
    `$XDG_RUNTIME_DIR/jcl-clicker-ydotool.socket`.
 
-2. Verifique o acesso a `/dev/uinput` (seção *Permissão de input*).
+2. Verifique o acesso a `/dev/uinput` (veja a seção acima).
 
 3. Se um daemon `ydotoold` do sistema estiver rodando com um dispositivo
-   virtual ativo, pode haver conflito de nome no X11 — encerre-o
+   virtual ativo, pode haver conflito de nome — encerre-o
    (`sudo systemctl stop ydotool`) e tente de novo; o app prefere sempre o
    daemon vendorizado.
+
+4. Verifique se o grupo `input` está ativo na sessão atual:
+
+   ```bash
+   id -nG
+   ```
+
+   Se `input` não aparecer, faça **logout/login** (a mudança de grupo só
+   é aplicada ao iniciar uma nova sessão).
+
+---
+
+### Atalho global não funciona no Wayland
+
+O atalho global no Wayland usa `evdev` para ler dispositivos de entrada diretamente. Isso requer acesso a `/dev/input/event*`.
+
+**Solução:** o mesmo script de setup de permissões resolve isso — o grupo `input` dá acesso aos dispositivos de entrada:
+
+```bash
+sudo ./scripts/setup-uinput.sh
+```
+
+Se já executou o setup antes, verifique se o grupo está ativo na sessão:
+
+```bash
+id -nG | grep input
+```
+
+Se não aparecer, faça **logout/login**.
+
+---
+
+### App não abre (sem mensagem de erro)
+
+1. Verifique se há uma instância anterior travada:
+
+   ```bash
+   pgrep -af jcl-clicker
+   ```
+
+   Se houver, mate com `kill <PID>`.
+
+2. Teste pelo terminal para ver erros:
+
+   ```bash
+   python3 -m app.main 2>&1
+   ```
+
+3. Verifique se as dependências do sistema estão instaladas:
+
+   ```bash
+   python3 -c "import gi; gi.require_version('Gtk', '4.0'); from gi.repository import Gtk; print('GTK4 OK')"
+   ```
+
+---
+
+### `TypeError` ou `KeyError` ao iniciar
+
+Isso indica um `config.json` corrompido. O app substitui automaticamente valores inválidos pelos padrões, mas se o arquivo estiver malformado JSON, pode falhar.
+
+**Solução:** delete o arquivo de config para recriar com os valores padrão:
+
+```bash
+rm ~/.config/jcl-clicker/config.json
+```
+
+---
+
+### Perdeu a configuração ao atualizar de versão antiga (pre-rebranding)
+
+Configs antigas em `~/.config/autoclicker/` são migradas automaticamente para `~/.config/jcl-clicker/` na primeira execução. Se a migração não ocorreu:
+
+```bash
+cp -a ~/.config/autoclicker/* ~/.config/jcl-clicker/
+```
 
 ---
 
